@@ -838,149 +838,225 @@ const POSModule = ({ onBack }) => {
     };
 
     // ── MODAL ESCÁNER CONTINUO ──
-    const ScannerModal = () => {
-        const videoRef    = React.useRef(null);
-        const streamRef   = React.useRef(null);
-        const intervalRef = React.useRef(null);
-        const [camError, setCamError] = useState('');
-        const [scanning, setScanning] = useState(false);
+   const ScannerModal = () => {
+    const qrInstanceRef = React.useRef(null);   // instancia de Html5Qrcode
+    const [camError, setCamError]   = useState('');
+    const [scanning, setScanning]   = useState(false);
+    const [manualCode, setManualCode] = useState('');
 
-        useEffect(() => {
-            let detector;
-            const start = async () => {
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({
-                        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-                    });
-                    streamRef.current = stream;
-                    if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
-                    setScanning(true);
+    useEffect(() => {
+        // ── IMPORTANTE PARA iOS/SAFARI ──
+        // html5-qrcode maneja internamente getUserMedia + detección
+        // de QR/códigos de barras sin necesidad de BarcodeDetector nativo.
+        // Funciona en: Chrome desktop, Chrome Android, Safari iOS, Firefox.
+        // REQUISITO: HTTPS (o localhost). En HTTP el navegador bloquea la cámara.
 
-                    if ('BarcodeDetector' in window) {
-                        detector = new BarcodeDetector({ formats: ['qr_code','ean_13','ean_8','code_128','code_39','upc_a','upc_e'] });
-                        intervalRef.current = setInterval(async () => {
-                            if (!videoRef.current || videoRef.current.readyState < 2) return;
-                            try {
-                                const codes = await detector.detect(videoRef.current);
-                                if (codes.length > 0) handleScanQR(codes[0].rawValue);
-                            } catch(_) {}
-                        }, 400);
-                    } else {
-                        setCamError('Tu navegador no soporta BarcodeDetector nativo. Usa Chrome en Android o ingresa el código manualmente.');
+        const startScanner = async () => {
+            try {
+                // Creamos la instancia apuntando al div vacío "qr-reader-pos"
+                qrInstanceRef.current = new Html5Qrcode('qr-reader-pos');
+
+                await qrInstanceRef.current.start(
+                    { facingMode: 'environment' }, // cámara trasera
+                    {
+                        fps: 10,                              // lecturas por segundo
+                        qrbox: { width: 260, height: 260 },  // zona de enfoque
+                        aspectRatio: 1.0,
+                        // html5-qrcode soporta: qr_code, ean_13, ean_8,
+                        // code_128, code_39, upc_a, upc_e, itf, etc.
+                        // No hace falta configurarlos: los detecta todos por defecto.
+                    },
+                    (codigoLeido) => {
+                        // Callback de lectura exitosa → misma función que tenías
+                        handleScanQR(codigoLeido);
+                    },
+                    () => {
+                        // Errores frame-a-frame (QR fuera de foco, etc.) → ignorar
                     }
-                } catch(e) {
-                    setCamError('No se pudo acceder a la cámara. Verifica los permisos del navegador.');
-                }
-            };
-            start();
-            return () => {
-                clearInterval(intervalRef.current);
-                if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
-            };
-        }, []);
+                );
 
-        const [manualCode, setManualCode] = useState('');
+                setScanning(true);
+            } catch (err) {
+                console.error('Error abriendo cámara:', err);
+                setCamError(
+                    'No se pudo acceder a la cámara.\n' +
+                    'Verifica que el sitio corra en HTTPS o localhost\n' +
+                    'y que hayas dado permiso de cámara al navegador.'
+                );
+            }
+        };
 
-        return (
-            <div className="fixed inset-0 bg-black z-50 flex flex-col">
-                {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 bg-black/80 backdrop-blur-sm flex-shrink-0">
-                    <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
-                        <p className="text-white font-black uppercase text-sm tracking-tight">Escáner Activo</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="bg-blue-500 text-white text-[10px] font-black px-2 py-1 rounded-full">{cart.length} producto{cart.length !== 1 ? 's' : ''}</span>
-                        <span className="bg-emerald-500 text-white text-[10px] font-black px-2 py-1 rounded-full">${totalUSD.toFixed(2)}</span>
-                    </div>
+        startScanner();
+
+        // Limpieza al desmontar: detener cámara y liberar stream
+        // (Crítico en iOS — si no se hace, la próxima apertura falla)
+        return () => {
+            if (qrInstanceRef.current) {
+                qrInstanceRef.current
+                    .stop()
+                    .then(() => qrInstanceRef.current.clear())
+                    .catch(err => console.warn('Error cerrando escáner:', err));
+            }
+        };
+    }, []); // ← sin dependencias: se ejecuta solo al montar/desmontar
+
+    return (
+        <div className="fixed inset-0 bg-black z-50 flex flex-col">
+
+            {/* ── Header ── */}
+            <div className="flex items-center justify-between px-4 py-3 bg-black/80 backdrop-blur-sm flex-shrink-0">
+                <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+                    <p className="text-white font-black uppercase text-sm tracking-tight">Escáner Activo</p>
                 </div>
-
-                {/* Visor de cámara */}
-                <div className="relative flex-1 bg-black overflow-hidden">
-                    <video ref={videoRef} className="w-full h-full object-cover" playsInline muted autoPlay/>
-
-                    {/* Visor tipo escáner */}
-                    {scanning && !camError && (
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <div className="relative w-64 h-64">
-                                {/* Esquinas */}
-                                <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-blue-400 rounded-tl-lg"></div>
-                                <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-blue-400 rounded-tr-lg"></div>
-                                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-blue-400 rounded-bl-lg"></div>
-                                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-blue-400 rounded-br-lg"></div>
-                                {/* Línea animada */}
-                                <div className="absolute left-2 right-2 h-0.5 bg-blue-400/80 rounded-full" style={{animation: 'scanLine 1.8s ease-in-out infinite', top: '50%'}}></div>
-                            </div>
-                            {/* Overlay oscuro alrededor */}
-                            <div className="absolute inset-0 -z-10" style={{background: 'radial-gradient(ellipse 300px 300px at center, transparent 45%, rgba(0,0,0,0.6) 55%)'}}></div>
-                        </div>
-                    )}
-
-                    {/* Error de cámara */}
-                    {camError && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/80 p-6">
-                            <div className="bg-slate-800 rounded-2xl p-6 text-center max-w-xs">
-                                <Icon name="CameraOff" size={32} className="text-rose-400 mx-auto mb-3"/>
-                                <p className="text-rose-300 text-xs font-bold leading-relaxed">{camError}</p>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Log de productos escaneados — aparece sobre la cámara */}
-                    <div className="absolute top-3 right-3 left-3 space-y-2 pointer-events-none">
-                        {scanLog.map((entry, i) => (
-                            <div key={entry.ts} className={`flex items-center gap-3 px-4 py-3 rounded-2xl backdrop-blur-md shadow-xl transition-all ${entry.status === 'ok' ? 'bg-emerald-500/90' : 'bg-rose-500/90'} ${i > 0 ? 'opacity-40' : 'opacity-100'}`}>
-                                <Icon name={entry.status === 'ok' ? 'CheckCircle' : 'XCircle'} size={18} className="text-white flex-shrink-0"/>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-white font-black text-xs uppercase truncate">{entry.nombre}</p>
-                                    {entry.status === 'ok' && <p className="text-white/80 text-[10px] font-bold">${entry.precio.toFixed(2)} por unidad</p>}
-                                    {entry.status === 'error' && <p className="text-white/80 text-[10px] font-bold">Producto no encontrado</p>}
-                                </div>
-                                {i === 0 && entry.status === 'ok' && (
-                                    <span className="text-white font-black text-sm bg-white/20 px-2 py-0.5 rounded-lg">
-                                        x{cart.find(c => c.name === entry.nombre)?.qty || 1}
-                                    </span>
-                                )}
-                            </div>
-                        ))}
-                    </div>
+                <div className="flex items-center gap-2">
+                    <span className="bg-blue-500 text-white text-[10px] font-black px-2 py-1 rounded-full">
+                        {cart.length} producto{cart.length !== 1 ? 's' : ''}
+                    </span>
+                    <span className="bg-emerald-500 text-white text-[10px] font-black px-2 py-1 rounded-full">
+                        ${totalUSD.toFixed(2)}
+                    </span>
                 </div>
+            </div>
 
-                {/* Footer — entrada manual + botón LISTO */}
-                <div className="bg-slate-900 px-4 pt-4 pb-6 flex-shrink-0 space-y-3">
-                    <p className="text-[10px] font-black text-slate-500 uppercase text-center tracking-widest">O ingresa el código manualmente</p>
-                    <div className="flex gap-2">
-                        <input
-                            value={manualCode}
-                            onChange={e => setManualCode(e.target.value.toUpperCase())}
-                            onKeyDown={e => { if(e.key === 'Enter' && manualCode.trim()) { handleScanQR(manualCode.trim()); setManualCode(''); } }}
-                            placeholder="LEGALYA-PROD-00001"
-                            className="flex-1 px-4 py-3 bg-slate-800 border border-slate-700 text-white rounded-2xl text-sm font-bold outline-none focus:border-blue-500 transition-colors uppercase"
-                        />
-                        <button
-                            onClick={() => { if(manualCode.trim()) { handleScanQR(manualCode.trim()); setManualCode(''); } }}
-                            className="px-5 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black uppercase text-sm transition-colors"
-                        >
-                            Agregar
-                        </button>
-                    </div>
-                    <button
-                        onClick={() => { setScannerOpen(false); setScanLog([]); }}
-                        className="w-full py-4 bg-white hover:bg-slate-100 text-slate-900 rounded-2xl font-black uppercase text-sm transition-colors flex items-center justify-center gap-2 shadow-lg"
-                    >
-                        <Icon name="CheckCircle" size={18} className="text-emerald-600"/> LISTO — Ver Carrito ({cart.length})
-                    </button>
-                </div>
+            {/* ── Visor de cámara ── */}
+            <div className="relative flex-1 bg-black overflow-hidden">
 
+                {/* html5-qrcode monta el <video> dentro de este div */}
+                <div
+                    id="qr-reader-pos"
+                    style={{
+                        width: '100%',
+                        height: '100%',
+                        // Ocultamos los controles nativos que inyecta html5-qrcode
+                        // (botón de cambiar cámara, texto de estado, etc.)
+                        // El video en sí queda visible a través del CSS de abajo
+                    }}
+                />
+
+                {/* Ocultar via CSS los controles internos de html5-qrcode
+                    que no queremos mostrar (ya tenemos nuestra propia UI) */}
                 <style>{`
+                    #qr-reader-pos > img { display: none !important; }
+                    #qr-reader-pos__header_message { display: none !important; }
+                    #qr-reader-pos__status_span { display: none !important; }
+                    #qr-reader-pos__camera_selection { display: none !important; }
+                    #qr-reader-pos__dashboard { display: none !important; }
+                    #qr-reader-pos video {
+                        width: 100% !important;
+                        height: 100% !important;
+                        object-fit: cover !important;
+                    }
                     @keyframes scanLine {
                         0%, 100% { transform: translateY(-80px); opacity: 0.4; }
-                        50% { transform: translateY(80px); opacity: 1; }
+                        50%       { transform: translateY(80px);  opacity: 1;   }
                     }
                 `}</style>
+
+                {/* Marco de enfoque tipo escáner (decorativo, igual que antes) */}
+                {scanning && !camError && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="relative w-64 h-64">
+                            <div className="absolute top-0 left-0  w-8 h-8 border-t-4 border-l-4 border-blue-400 rounded-tl-lg"></div>
+                            <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-blue-400 rounded-tr-lg"></div>
+                            <div className="absolute bottom-0 left-0  w-8 h-8 border-b-4 border-l-4 border-blue-400 rounded-bl-lg"></div>
+                            <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-blue-400 rounded-br-lg"></div>
+                            <div
+                                className="absolute left-2 right-2 h-0.5 bg-blue-400/80 rounded-full"
+                                style={{ animation: 'scanLine 1.8s ease-in-out infinite', top: '50%' }}
+                            />
+                        </div>
+                        <div
+                            className="absolute inset-0 -z-10"
+                            style={{ background: 'radial-gradient(ellipse 300px 300px at center, transparent 45%, rgba(0,0,0,0.6) 55%)' }}
+                        />
+                    </div>
+                )}
+
+                {/* Error de cámara */}
+                {camError && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/80 p-6">
+                        <div className="bg-slate-800 rounded-2xl p-6 text-center max-w-xs">
+                            <Icon name="CameraOff" size={32} className="text-rose-400 mx-auto mb-3" />
+                            <p className="text-rose-300 text-xs font-bold leading-relaxed whitespace-pre-line">
+                                {camError}
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                {/* Log de productos escaneados — sobre la cámara, igual que antes */}
+                <div className="absolute top-3 right-3 left-3 space-y-2 pointer-events-none">
+                    {scanLog.map((entry, i) => (
+                        <div
+                            key={entry.ts}
+                            className={`flex items-center gap-3 px-4 py-3 rounded-2xl backdrop-blur-md shadow-xl transition-all
+                                ${entry.status === 'ok' ? 'bg-emerald-500/90' : 'bg-rose-500/90'}
+                                ${i > 0 ? 'opacity-40' : 'opacity-100'}`}
+                        >
+                            <Icon
+                                name={entry.status === 'ok' ? 'CheckCircle' : 'XCircle'}
+                                size={18}
+                                className="text-white flex-shrink-0"
+                            />
+                            <div className="flex-1 min-w-0">
+                                <p className="text-white font-black text-xs uppercase truncate">{entry.nombre}</p>
+                                {entry.status === 'ok'
+                                    ? <p className="text-white/80 text-[10px] font-bold">${entry.precio.toFixed(2)} por unidad</p>
+                                    : <p className="text-white/80 text-[10px] font-bold">Producto no encontrado</p>
+                                }
+                            </div>
+                            {i === 0 && entry.status === 'ok' && (
+                                <span className="text-white font-black text-sm bg-white/20 px-2 py-0.5 rounded-lg">
+                                    x{cart.find(c => c.name === entry.nombre)?.qty || 1}
+                                </span>
+                            )}
+                        </div>
+                    ))}
+                </div>
             </div>
-        );
-    };
+
+            {/* ── Footer — entrada manual + botón LISTO ── */}
+            <div className="bg-slate-900 px-4 pt-4 pb-6 flex-shrink-0 space-y-3">
+                <p className="text-[10px] font-black text-slate-500 uppercase text-center tracking-widest">
+                    O ingresa el código manualmente
+                </p>
+                <div className="flex gap-2">
+                    <input
+                        value={manualCode}
+                        onChange={e => setManualCode(e.target.value.toUpperCase())}
+                        onKeyDown={e => {
+                            if (e.key === 'Enter' && manualCode.trim()) {
+                                handleScanQR(manualCode.trim());
+                                setManualCode('');
+                            }
+                        }}
+                        placeholder="LEGALYA-PROD-00001"
+                        className="flex-1 px-4 py-3 bg-slate-800 border border-slate-700 text-white rounded-2xl text-sm font-bold outline-none focus:border-blue-500 transition-colors uppercase"
+                    />
+                    <button
+                        onClick={() => {
+                            if (manualCode.trim()) {
+                                handleScanQR(manualCode.trim());
+                                setManualCode('');
+                            }
+                        }}
+                        className="px-5 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black uppercase text-sm transition-colors"
+                    >
+                        Agregar
+                    </button>
+                </div>
+                <button
+                    onClick={() => { setScannerOpen(false); setScanLog([]); }}
+                    className="w-full py-4 bg-white hover:bg-slate-100 text-slate-900 rounded-2xl font-black uppercase text-sm transition-colors flex items-center justify-center gap-2 shadow-lg"
+                >
+                    <Icon name="CheckCircle" size={18} className="text-emerald-600" />
+                    LISTO — Ver Carrito ({cart.length})
+                </button>
+            </div>
+        </div>
+    );
+};
 
     // ── RENDER PRINCIPAL ──
     return (
