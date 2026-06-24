@@ -768,12 +768,14 @@ const POSModule = ({ onBack }) => {
             }
         } catch(e) { console.error('Scan error:', e); }
 
-        if (prodToAdd) {
-            addToCart(prodToAdd, 1);
-            feedback = { nombre: prodToAdd.name, precio: prodToAdd.sellPrice, status: 'ok' };
-        } else {
-            feedback = { nombre: code.substring(0, 24), precio: 0, status: 'error' };
-        }
+      if (prodToAdd) {
+    addToCart(prodToAdd, 1);
+    playBeep('ok');   // ← línea nueva
+    feedback = { nombre: prodToAdd.name, precio: prodToAdd.sellPrice, status: 'ok' };
+} else {
+    playBeep('error'); // ← línea nueva
+    feedback = { nombre: code.substring(0, 24), precio: 0, status: 'error' };
+}
 
         // Agregar al log de escaneo (máx 5 entradas visibles)
         setScanLog(prev => [{ ...feedback, ts: now }, ...prev].slice(0, 5));
@@ -836,7 +838,60 @@ const POSModule = ({ onBack }) => {
         addTransaction(rows);
         onBack();
     };
+// ── Pitido de escáner via Web Audio API ──
+// No necesita archivos de audio externos — genera el tono matemáticamente.
+// Funciona en Chrome, Safari iOS, Firefox.
+// NOTA: iOS requiere que el AudioContext sea creado tras una interacción
+// del usuario (tap). Como el modal se abre con un botón, esto se cumple.
+const beepRef = React.useRef(null); // reutilizamos el AudioContext entre escaneos
 
+const playBeep = (tipo = 'ok') => {
+    try {
+        // Crear o reutilizar el AudioContext
+        if (!beepRef.current) {
+            beepRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        const ctx = beepRef.current;
+
+        // Si el contexto está suspendido (política de iOS), reanudarlo
+        if (ctx.state === 'suspended') ctx.resume();
+
+        const oscillator = ctx.createOscillator();
+        const gainNode   = ctx.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(ctx.destination);
+
+        if (tipo === 'ok') {
+            // Pitido corto y agudo — producto encontrado (igual que un escáner real)
+            oscillator.frequency.setValueAtTime(1850, ctx.currentTime);
+            gainNode.gain.setValueAtTime(0.4, ctx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+            oscillator.start(ctx.currentTime);
+            oscillator.stop(ctx.currentTime + 0.12);
+        } else {
+            // Doble pitido grave — producto no encontrado
+            oscillator.frequency.setValueAtTime(400, ctx.currentTime);
+            gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+            oscillator.start(ctx.currentTime);
+            oscillator.stop(ctx.currentTime + 0.08);
+
+            // Segundo pitido 150ms después
+            const osc2  = ctx.createOscillator();
+            const gain2 = ctx.createGain();
+            osc2.connect(gain2);
+            gain2.connect(ctx.destination);
+            osc2.frequency.setValueAtTime(400, ctx.currentTime + 0.15);
+            gain2.gain.setValueAtTime(0.3, ctx.currentTime + 0.15);
+            gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.23);
+            osc2.start(ctx.currentTime + 0.15);
+            osc2.stop(ctx.currentTime + 0.23);
+        }
+    } catch (e) {
+        console.warn('No se pudo reproducir el pitido:', e);
+    }
+};
     // ── MODAL ESCÁNER CONTINUO ──
    const ScannerModal = () => {
     const qrInstanceRef = React.useRef(null);   // instancia de Html5Qrcode
