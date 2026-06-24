@@ -1793,35 +1793,285 @@ const ContactModule = ({ onBack }) => {
 };
 
 // ==========================================
-// MÓDULO INVENTARIO
+// MÓDULO INVENTARIO + ETIQUETAS QR
 // ==========================================
 const InventoryModule = ({ onBack }) => {
-    const { inventory } = useContext(AppContext);
-    const [search, setSearch] = useState("");
+    const { inventory, tasaBCV } = useContext(AppContext);
+    const [search, setSearch]       = useState('');
+    const [etiqueta, setEtiqueta]   = useState(null); // producto seleccionado para etiqueta
+    const qrRef = React.useRef(null); // referencia al div donde QRCode monta el canvas
 
-    const filteredInventory = inventory.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+    // ── Filtro de búsqueda ──
+    const filteredInventory = inventory.filter(p =>
+        p.name.toLowerCase().includes(search.toLowerCase())
+    );
 
+    // ── Genera el QR en el div #qr-etiqueta-canvas ──
+    // Se ejecuta cada vez que cambia el producto seleccionado.
+    // QRCode.js monta un <canvas> dentro del div apuntado por qrRef.
+    React.useEffect(() => {
+        if (!etiqueta || !qrRef.current) return;
+
+        // Limpiar QR anterior antes de generar uno nuevo
+        qrRef.current.innerHTML = '';
+
+        new QRCode(qrRef.current, {
+            // El valor codificado es p.name — exactamente lo que está
+            // en el campo `codigo_qr` de Supabase, que handleScanQR ya busca.
+            text: etiqueta.name,
+            width: 220,
+            height: 220,
+            correctLevel: QRCode.CorrectLevel.M,
+        });
+    }, [etiqueta]);
+
+    // ── Extrae el dataURL del canvas generado por QRCode.js ──
+    const obtenerDataURL = () => {
+        if (!qrRef.current) return null;
+        const canvas = qrRef.current.querySelector('canvas');
+        if (canvas) return canvas.toDataURL('image/png');
+        const img = qrRef.current.querySelector('img');
+        if (img) return img.src;
+        return null;
+    };
+
+    // ── Descargar QR como PNG ──
+    const descargarQR = () => {
+        const dataUrl = obtenerDataURL();
+        if (!dataUrl) return;
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = `QR_${etiqueta.name.replace(/\s+/g, '_')}.png`;
+        link.click();
+    };
+
+    // ── Imprimir etiqueta ──
+    // Abre una ventana nueva con solo la etiqueta para imprimir,
+    // sin afectar el layout principal de la app.
+    const imprimirEtiqueta = () => {
+        const dataUrl = obtenerDataURL();
+        if (!dataUrl || !etiqueta) return;
+
+        const ventana = window.open('', '_blank', 'width=400,height=500');
+        ventana.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8"/>
+                <title>Etiqueta — ${etiqueta.name}</title>
+                <style>
+                    * { margin: 0; padding: 0; box-sizing: border-box; }
+                    body {
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        min-height: 100vh;
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                        background: white;
+                        padding: 24px;
+                    }
+                    .etiqueta {
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        gap: 12px;
+                        border: 2px solid #e2e8f0;
+                        border-radius: 16px;
+                        padding: 24px;
+                        max-width: 280px;
+                        width: 100%;
+                    }
+                    img {
+                        width: 200px;
+                        height: 200px;
+                        border-radius: 8px;
+                    }
+                    .nombre {
+                        font-size: 15px;
+                        font-weight: 900;
+                        text-transform: uppercase;
+                        text-align: center;
+                        color: #0f172a;
+                        letter-spacing: -0.02em;
+                        line-height: 1.2;
+                    }
+                    .precio-usd {
+                        font-size: 22px;
+                        font-weight: 900;
+                        color: #1d4ed8;
+                        letter-spacing: -0.03em;
+                    }
+                    .precio-bs {
+                        font-size: 13px;
+                        font-weight: 700;
+                        color: #64748b;
+                        margin-top: -8px;
+                    }
+                    .divider {
+                        width: 100%;
+                        height: 1px;
+                        background: #e2e8f0;
+                    }
+                    @media print {
+                        body { padding: 0; }
+                        .etiqueta { border: 1.5px solid #ccc; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="etiqueta">
+                    <img src="${dataUrl}" alt="QR ${etiqueta.name}" />
+                    <div class="divider"></div>
+                    <p class="nombre">${etiqueta.name}</p>
+                    <p class="precio-usd">$${etiqueta.sellPrice.toFixed(2)}</p>
+                    <p class="precio-bs">${(etiqueta.sellPrice * tasaBCV).toFixed(2)} Bs</p>
+                </div>
+                <script>
+                    // Imprimir automáticamente al abrir la ventana
+                    window.onload = () => {
+                        setTimeout(() => { window.print(); window.close(); }, 400);
+                    };
+                <\/script>
+            </body>
+            </html>
+        `);
+        ventana.document.close();
+    };
+
+    // ── RENDER ──
     return (
         <div className="animate-in space-y-6">
-            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex items-center gap-4">
-                {/* BOTON GLOBAL MANEJA EL RETROCESO */}
-                <h2 className="font-black uppercase italic tracking-tighter text-xl">Stock Actual</h2>
+
+            {/* Header + buscador */}
+            <div className="bg-white p-4 md:p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <h2 className="font-black uppercase italic tracking-tighter text-xl flex-1">
+                    Stock Actual
+                </h2>
+                <div className="relative w-full sm:w-72">
+                    <Icon name="Search" size={16} className="absolute left-3 top-3 text-slate-400" />
+                    <input
+                        type="text"
+                        placeholder="BUSCAR PRODUCTO..."
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold uppercase outline-none focus:border-blue-500 transition-colors"
+                    />
+                </div>
             </div>
+
+            {/* Tabla de inventario */}
             <div className="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-sm">
                 <table className="w-full text-sm font-bold">
-                    <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400"><tr><th className="p-6 text-left">Producto</th><th className="p-6 text-center">Existencia</th><th className="p-6 text-center">Unidad</th><th className="p-6 text-right">Precio</th></tr></thead>
+                    <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400">
+                        <tr>
+                            <th className="p-4 md:p-6 text-left">Producto</th>
+                            <th className="p-4 md:p-6 text-center">Existencia</th>
+                            <th className="p-4 md:p-6 text-center">Unidad</th>
+                            <th className="p-4 md:p-6 text-right">Precio</th>
+                            <th className="p-4 md:p-6 text-center">Etiqueta</th>
+                        </tr>
+                    </thead>
                     <tbody className="divide-y divide-slate-50">
-                        {inventory.map(p => (
-                            <tr key={p.id}>
-                                <td className="p-6 uppercase font-black">{p.name}</td>
-                                <td className="p-6 text-center text-blue-600">{p.stock.toFixed(p.unit === 'kg' ? 3 : 0)}</td>
-                                <td className="p-6 text-center uppercase text-[10px] text-slate-400">{p.unit}</td>
-                                <td className="p-6 text-right font-black">${p.sellPrice.toFixed(2)}</td>
+                        {filteredInventory.length === 0 && (
+                            <tr>
+                                <td colSpan={5} className="p-12 text-center text-slate-300 font-bold uppercase text-sm">
+                                    Sin productos en inventario
+                                </td>
+                            </tr>
+                        )}
+                        {filteredInventory.map(p => (
+                            <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                                <td className="p-4 md:p-6 uppercase font-black">{p.name}</td>
+                                <td className="p-4 md:p-6 text-center text-blue-600">
+                                    {p.stock.toFixed(p.unit === 'kg' ? 3 : 0)}
+                                </td>
+                                <td className="p-4 md:p-6 text-center uppercase text-[10px] text-slate-400">
+                                    {p.unit}
+                                </td>
+                                <td className="p-4 md:p-6 text-right font-black">
+                                    ${p.sellPrice.toFixed(2)}
+                                </td>
+                                <td className="p-4 md:p-6 text-center">
+                                    {/* Botón que abre el modal de etiqueta para este producto */}
+                                    <button
+                                        onClick={() => setEtiqueta(p)}
+                                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-black active:scale-95 text-white rounded-xl text-[10px] font-black uppercase transition-all"
+                                        title={`Generar etiqueta QR para ${p.name}`}
+                                    >
+                                        <Icon name="QrCode" size={13} />
+                                        <span className="hidden sm:inline">Etiqueta</span>
+                                    </button>
+                                </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             </div>
+
+            {/* ── MODAL DE ETIQUETA QR ── */}
+            {etiqueta && (
+                <div
+                    className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                    onClick={e => { if (e.target === e.currentTarget) setEtiqueta(null); }}
+                >
+                    <div className="bg-white rounded-[2.5rem] shadow-2xl p-8 max-w-sm w-full flex flex-col items-center gap-5 animate-in">
+
+                        {/* Header del modal */}
+                        <div className="w-full flex items-center justify-between">
+                            <h3 className="font-black uppercase text-sm text-slate-400 tracking-widest">
+                                Etiqueta QR
+                            </h3>
+                            <button
+                                onClick={() => setEtiqueta(null)}
+                                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 transition-colors"
+                            >
+                                <Icon name="X" size={16} className="text-slate-500" />
+                            </button>
+                        </div>
+
+                        {/* QR generado por QRCode.js */}
+                        <div
+                            ref={qrRef}
+                            className="p-3 bg-white border-2 border-slate-100 rounded-2xl shadow-inner flex items-center justify-center"
+                            style={{ minWidth: 228, minHeight: 228 }}
+                        />
+
+                        {/* Info del producto */}
+                        <div className="text-center space-y-1">
+                            <p className="font-black uppercase text-lg text-slate-900 leading-tight">
+                                {etiqueta.name}
+                            </p>
+                            <p className="font-black text-2xl text-blue-600">
+                                ${etiqueta.sellPrice.toFixed(2)}
+                            </p>
+                            <p className="font-bold text-sm text-slate-400">
+                                {(etiqueta.sellPrice * tasaBCV).toFixed(2)} Bs
+                            </p>
+                        </div>
+
+                        {/* Acciones */}
+                        <div className="w-full flex gap-3">
+                            <button
+                                onClick={descargarQR}
+                                className="flex-1 flex items-center justify-center gap-2 py-3 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 rounded-2xl font-black uppercase text-xs transition-all"
+                            >
+                                <Icon name="Download" size={15} />
+                                Descargar
+                            </button>
+                            <button
+                                onClick={imprimirEtiqueta}
+                                className="flex-1 flex items-center justify-center gap-2 py-3 bg-slate-900 hover:bg-black active:scale-95 text-white rounded-2xl font-black uppercase text-xs transition-all shadow-lg"
+                            >
+                                <Icon name="Printer" size={15} />
+                                Imprimir
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+            )}
+
         </div>
     );
 };
@@ -2458,336 +2708,6 @@ const useIsMobile = () => {
         return () => window.removeEventListener('resize', handler);
     }, []);
     return { isMobile, isTablet, isDesktop: !isMobile && !isTablet };
-};
-
-// ==========================================
-// PRODUCT MANAGER — gestión tabla products
-// ==========================================
-const ProductManager = ({ onBack, currentUser }) => {
-    const rif = currentUser?.rif || RIF_DEFAULT;
-    const [products, setProducts] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [search, setSearch] = useState('');
-    const [showForm, setShowForm] = useState(false);
-    const [form, setForm] = useState({ nombre:'', categoria:'GENERAL', unidad:'unidades', costo:'', precio_venta:'', stock:'' });
-    const [saving, setSaving] = useState(false);
-
-    const load = async () => {
-        setLoading(true);
-        try {
-            const data = await sbFetch(`products?rif_empresa=eq.${encodeURIComponent(rif)}&activo=eq.true&order=nombre.asc`);
-            setProducts(data || []);
-        } catch(e) { console.error(e); }
-        setLoading(false);
-    };
-    useEffect(() => { load(); }, []);
-
-    const handleSave = async () => {
-        if (!form.nombre) return alert('El nombre es obligatorio');
-        setSaving(true);
-        try {
-            const count = products.length + 1;
-            const codigo = `PROD-${String(count).padStart(5,'0')}`;
-            const qr = `LEGALYA-${codigo}`;
-            await sbFetch('products', {
-                method: 'POST', prefer: 'return=minimal',
-                body: JSON.stringify({
-                    rif_empresa: rif,
-                    codigo_producto: codigo,
-                    codigo_qr: qr,
-                    nombre: form.nombre.toUpperCase().trim(),
-                    categoria: form.categoria.toUpperCase().trim(),
-                    unidad: form.unidad,
-                    costo: parseFloat(form.costo) || 0,
-                    precio_venta: parseFloat(form.precio_venta) || 0,
-                    stock: parseFloat(form.stock) || 0,
-                    activo: true
-                })
-            });
-            setForm({ nombre:'', categoria:'GENERAL', unidad:'unidades', costo:'', precio_venta:'', stock:'' });
-            setShowForm(false);
-            await load();
-        } catch(e) { alert('Error al guardar: ' + e.message); }
-        setSaving(false);
-    };
-
-    const handleToggle = async (prod) => {
-        try {
-            await sbFetch(`products?id=eq.${prod.id}`, {
-                method: 'PATCH', prefer: 'return=minimal',
-                body: JSON.stringify({ activo: !prod.activo })
-            });
-            await load();
-        } catch(e) { console.error(e); }
-    };
-
-    const filtered = products.filter(p => p.nombre?.toLowerCase().includes(search.toLowerCase()) || p.codigo_producto?.includes(search));
-
-    return (
-        <div className="animate-in space-y-5 pb-20">
-            <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-xl"><Icon name="ArrowLeft" size={18}/></button>
-                    <div>
-                        <h2 className="font-black uppercase italic tracking-tight text-xl text-slate-900">Gestión de Productos</h2>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">{products.length} productos activos</p>
-                    </div>
-                </div>
-                <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-xl text-xs font-black uppercase transition-colors">
-                    <Icon name="Plus" size={14}/> Nuevo Producto
-                </button>
-            </div>
-
-            {showForm && (
-                <div className="bg-white border border-blue-200 rounded-[2rem] p-6 space-y-4 shadow-sm animate-in">
-                    <h3 className="text-sm font-black uppercase text-blue-600 flex items-center gap-2"><Icon name="Package" size={16}/> Nuevo Producto</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div className="md:col-span-2"><label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Nombre *</label><input placeholder="HARINA PAN 1KG" value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value.toUpperCase()})} className="w-full p-3 bg-slate-50 rounded-xl font-bold outline-none focus:ring-2 ring-blue-500 border border-transparent transition-all uppercase"/></div>
-                        <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Categoría</label><input placeholder="ALIMENTOS" value={form.categoria} onChange={e=>setForm({...form,categoria:e.target.value.toUpperCase()})} className="w-full p-3 bg-slate-50 rounded-xl font-bold outline-none focus:ring-2 ring-blue-500 border border-transparent transition-all uppercase"/></div>
-                        <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Unidad</label>
-                            <select value={form.unidad} onChange={e=>setForm({...form,unidad:e.target.value})} className="w-full p-3 bg-slate-50 rounded-xl font-bold outline-none cursor-pointer">
-                                <option value="unidades">Unidades</option><option value="kg">Kilogramos</option><option value="litros">Litros</option><option value="cajas">Cajas</option>
-                            </select>
-                        </div>
-                        <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Costo ($)</label><input type="number" placeholder="0.00" value={form.costo} onChange={e=>setForm({...form,costo:e.target.value})} className="w-full p-3 bg-slate-50 rounded-xl font-bold outline-none focus:ring-2 ring-blue-500 border border-transparent transition-all"/></div>
-                        <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Precio Venta ($)</label><input type="number" placeholder="0.00" value={form.precio_venta} onChange={e=>setForm({...form,precio_venta:e.target.value})} className="w-full p-3 bg-slate-50 rounded-xl font-bold outline-none focus:ring-2 ring-blue-500 border border-transparent transition-all"/></div>
-                        <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Stock Inicial</label><input type="number" placeholder="0" value={form.stock} onChange={e=>setForm({...form,stock:e.target.value})} className="w-full p-3 bg-slate-50 rounded-xl font-bold outline-none focus:ring-2 ring-blue-500 border border-transparent transition-all"/></div>
-                    </div>
-                    <div className="flex gap-3">
-                        <button onClick={handleSave} disabled={saving} className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-black uppercase text-sm disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
-                            {saving ? <><Icon name="Loader" size={14} className="animate-spin"/>Guardando...</> : <><Icon name="Save" size={14}/>Guardar Producto</>}
-                        </button>
-                        <button onClick={()=>setShowForm(false)} className="px-5 py-3 bg-slate-100 text-slate-600 rounded-xl font-black uppercase text-sm hover:bg-slate-200 transition-colors">Cancelar</button>
-                    </div>
-                </div>
-            )}
-
-            <div className="relative">
-                <Icon name="Search" size={16} className="absolute left-4 top-3.5 text-slate-400"/>
-                <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar por nombre o código..." className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500 transition-colors"/>
-            </div>
-
-            {loading ? <div className="flex justify-center py-10"><Icon name="Loader" size={24} className="animate-spin text-slate-400"/></div> : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filtered.map(p => (
-                        <div key={p.id} className="bg-white border border-slate-100 rounded-[1.5rem] p-5 shadow-sm hover:shadow-md transition-shadow">
-                            <div className="flex justify-between items-start mb-3">
-                                <div className="flex-1 min-w-0">
-                                    <p className="font-black text-sm uppercase text-slate-900 truncate">{p.nombre}</p>
-                                    <p className="text-[10px] font-black text-blue-500 uppercase mt-0.5">{p.codigo_producto}</p>
-                                </div>
-                                <span className={`text-[9px] font-black uppercase px-2 py-1 rounded-full ml-2 flex-shrink-0 ${p.stock > 5 ? 'bg-emerald-100 text-emerald-600' : p.stock > 0 ? 'bg-amber-100 text-amber-600' : 'bg-rose-100 text-rose-600'}`}>
-                                    {p.stock > 5 ? 'En Stock' : p.stock > 0 ? 'Bajo Stock' : 'Agotado'}
-                                </span>
-                            </div>
-                            <div className="grid grid-cols-3 gap-2 mb-3">
-                                <div className="bg-slate-50 rounded-lg p-2 text-center"><p className="text-[9px] font-black text-slate-400 uppercase">Stock</p><p className="font-black text-slate-900 text-sm">{p.stock}</p></div>
-                                <div className="bg-slate-50 rounded-lg p-2 text-center"><p className="text-[9px] font-black text-slate-400 uppercase">Costo</p><p className="font-black text-blue-600 text-sm">${p.costo}</p></div>
-                                <div className="bg-emerald-50 rounded-lg p-2 text-center"><p className="text-[9px] font-black text-emerald-500 uppercase">Precio</p><p className="font-black text-emerald-600 text-sm">${p.precio_venta}</p></div>
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <p className="text-[9px] font-black text-slate-300 font-mono">{p.codigo_qr}</p>
-                                <div className="flex gap-2">
-                                    <button onClick={()=>handleToggle(p)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 transition-colors"><Icon name="Power" size={14}/></button>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                    {filtered.length===0 && <div className="col-span-full py-12 text-center text-slate-400 font-bold uppercase text-xs">No hay productos registrados</div>}
-                </div>
-            )}
-        </div>
-    );
-};
-
-// ==========================================
-// LABEL GENERATOR — Etiquetas QR para impresión
-// ==========================================
-const LabelGenerator = ({ onBack, currentUser }) => {
-    const rif = currentUser?.rif || RIF_DEFAULT;
-    const empresa = currentUser?.nombre_empresa || currentUser?.nombre || NOMBRE_EMPRESA_DEFAULT;
-    const [products, setProducts] = useState([]);
-    const [selected, setSelected] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [search, setSearch] = useState('');
-    const [copies, setCopies] = useState(1);
-
-    useEffect(() => {
-        sbFetch(`products?rif_empresa=eq.${encodeURIComponent(rif)}&activo=eq.true&order=nombre.asc`)
-            .then(d => { setProducts(d||[]); setLoading(false); }).catch(()=>setLoading(false));
-    }, []);
-
-    const toggleSelect = (id) => setSelected(s => s.includes(id) ? s.filter(x=>x!==id) : [...s, id]);
-    const selAll = () => setSelected(products.map(p=>p.id));
-
-    const generateQRDataURL = (text) => {
-        // QR simple usando API pública
-        return `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(text)}`;
-    };
-
-    const printLabels = () => {
-        const prods = products.filter(p => selected.includes(p.id));
-        if (!prods.length) return alert('Selecciona al menos un producto');
-        const win = window.open('', '_blank');
-        const labelsHTML = prods.flatMap(p => Array(copies).fill(p)).map(p => `
-            <div class="label">
-                <div class="header">LegalYa</div>
-                <div class="name">${p.nombre}</div>
-                <img class="qr" src="${generateQRDataURL(p.codigo_qr)}" alt="QR"/>
-                <div class="code">${p.codigo_producto}</div>
-                <div class="price">$${parseFloat(p.precio_venta).toFixed(2)}</div>
-            </div>
-        `).join('');
-        win.document.write(`<!DOCTYPE html><html><head><style>
-            *{margin:0;padding:0;box-sizing:border-box;}
-            body{font-family:Arial,sans-serif;background:#fff;}
-            .grid{display:flex;flex-wrap:wrap;gap:8px;padding:16px;}
-            .label{width:160px;border:1.5px solid #000;border-radius:6px;padding:8px;text-align:center;page-break-inside:avoid;}
-            .header{font-size:8px;font-weight:900;color:#2563eb;text-transform:uppercase;letter-spacing:2px;margin-bottom:3px;}
-            .name{font-size:9px;font-weight:900;text-transform:uppercase;margin-bottom:5px;min-height:22px;display:flex;align-items:center;justify-content:center;}
-            .qr{width:90px;height:90px;margin:4px auto;display:block;}
-            .code{font-size:8px;color:#666;font-family:monospace;margin-top:3px;}
-            .price{font-size:14px;font-weight:900;color:#059669;margin-top:3px;}
-            @media print{@page{margin:5mm;}.grid{padding:0;}}
-        </style></head><body><div class="grid">${labelsHTML}</div>
-        <script>window.onload=()=>{setTimeout(()=>{window.print();window.close();},1200);}<\/script></body></html>`);
-        win.document.close();
-    };
-
-    const filtered = products.filter(p => p.nombre?.toLowerCase().includes(search.toLowerCase()));
-
-    return (
-        <div className="animate-in space-y-5 pb-20">
-            <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-100 flex items-center justify-between flex-wrap gap-3">
-                <div className="flex items-center gap-3">
-                    <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-xl"><Icon name="ArrowLeft" size={18}/></button>
-                    <div><h2 className="font-black uppercase italic tracking-tight text-xl">Etiquetas QR</h2><p className="text-[10px] font-bold text-slate-400 uppercase">{selected.length} seleccionados</p></div>
-                </div>
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
-                        <span className="text-[10px] font-black text-slate-500 uppercase">Copias:</span>
-                        <input type="number" min="1" max="10" value={copies} onChange={e=>setCopies(parseInt(e.target.value)||1)} className="w-10 bg-transparent font-black text-center outline-none text-sm"/>
-                    </div>
-                    <button onClick={selAll} className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-black uppercase transition-colors">Selec. Todos</button>
-                    <button onClick={printLabels} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-xl text-xs font-black uppercase transition-colors">
-                        <Icon name="Printer" size={14}/> Imprimir
-                    </button>
-                </div>
-            </div>
-
-            <div className="relative">
-                <Icon name="Search" size={16} className="absolute left-4 top-3.5 text-slate-400"/>
-                <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar producto..." className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500 transition-colors"/>
-            </div>
-
-            {loading ? <div className="flex justify-center py-10"><Icon name="Loader" size={24} className="animate-spin text-slate-400"/></div> : (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                    {filtered.map(p => (
-                        <div key={p.id} onClick={()=>toggleSelect(p.id)}
-                            className={`cursor-pointer border-2 rounded-[1.5rem] p-4 text-center transition-all ${selected.includes(p.id) ? 'border-blue-500 bg-blue-50 shadow-lg shadow-blue-100' : 'border-slate-100 bg-white hover:border-slate-300'}`}>
-                            <div className={`w-5 h-5 rounded-full border-2 mx-auto mb-3 flex items-center justify-center transition-colors ${selected.includes(p.id) ? 'bg-blue-500 border-blue-500' : 'border-slate-300'}`}>
-                                {selected.includes(p.id) && <Icon name="Check" size={12} className="text-white"/>}
-                            </div>
-                            <img src={generateQRDataURL(p.codigo_qr || p.codigo_producto)} alt="QR" className="w-20 h-20 mx-auto mb-2 rounded-lg"/>
-                            <p className="font-black text-[10px] uppercase text-slate-900 leading-tight mb-1">{p.nombre}</p>
-                            <p className="text-[9px] font-mono text-blue-500">{p.codigo_producto}</p>
-                            <p className="font-black text-emerald-600 text-sm mt-1">${parseFloat(p.precio_venta||0).toFixed(2)}</p>
-                        </div>
-                    ))}
-                    {filtered.length===0 && <div className="col-span-full py-12 text-center text-slate-400 font-bold uppercase text-xs">Sin productos. Agrégalos en Gestión de Productos.</div>}
-                </div>
-            )}
-        </div>
-    );
-};
-
-// ==========================================
-// QR SCANNER — escáner de cámara
-// ==========================================
-const QRScanner = ({ onDetected, onClose }) => {
-    const videoRef = React.useRef(null);
-    const [error, setError] = useState('');
-    const [scanning, setScanning] = useState(false);
-    const streamRef = React.useRef(null);
-    const intervalRef = React.useRef(null);
-
-    const startCamera = async () => {
-        setError('');
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-            streamRef.current = stream;
-            if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }
-            setScanning(true);
-            // Usar BarcodeDetector si está disponible
-            if ('BarcodeDetector' in window) {
-                const detector = new BarcodeDetector({ formats: ['qr_code','ean_13','ean_8','code_128','code_39','upc_a','upc_e'] });
-                intervalRef.current = setInterval(async () => {
-                    if (videoRef.current && videoRef.current.readyState === 4) {
-                        try {
-                            const barcodes = await detector.detect(videoRef.current);
-                            if (barcodes.length > 0) {
-                                stopCamera();
-                                onDetected(barcodes[0].rawValue);
-                            }
-                        } catch(e) {}
-                    }
-                }, 300);
-            } else {
-                setError('Tu navegador no soporta escáner nativo. Ingresa el código manualmente.');
-            }
-        } catch(e) {
-            setError('No se pudo acceder a la cámara. Verifica los permisos.');
-        }
-    };
-
-    const stopCamera = () => {
-        if (intervalRef.current) clearInterval(intervalRef.current);
-        if (streamRef.current) streamRef.current.getTracks().forEach(t=>t.stop());
-        setScanning(false);
-    };
-
-    useEffect(() => { startCamera(); return () => stopCamera(); }, []);
-
-    const [manualCode, setManualCode] = useState('');
-
-    return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-slate-900 rounded-[2rem] w-full max-w-sm overflow-hidden border border-slate-700 shadow-2xl">
-                <div className="flex justify-between items-center p-5 border-b border-slate-800">
-                    <div className="flex items-center gap-2">
-                        <Icon name="ScanLine" size={18} className="text-blue-400"/>
-                        <h3 className="font-black uppercase text-white text-sm">Escanear Producto</h3>
-                    </div>
-                    <button onClick={()=>{stopCamera();onClose();}} className="p-2 hover:bg-slate-800 rounded-xl text-slate-400 transition-colors"><Icon name="X" size={16}/></button>
-                </div>
-                <div className="relative bg-black aspect-square">
-                    <video ref={videoRef} className="w-full h-full object-cover" playsInline muted/>
-                    {scanning && (
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <div className="w-48 h-48 border-2 border-blue-400 rounded-2xl relative">
-                                <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-blue-400 rounded-tl-lg"></div>
-                                <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-blue-400 rounded-tr-lg"></div>
-                                <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-blue-400 rounded-bl-lg"></div>
-                                <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-blue-400 rounded-br-lg"></div>
-                                <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-blue-400/60 animate-pulse"></div>
-                            </div>
-                        </div>
-                    )}
-                    {error && <div className="absolute inset-0 flex items-center justify-center bg-black/70 p-6"><p className="text-rose-400 text-xs font-bold text-center">{error}</p></div>}
-                </div>
-                <div className="p-5 space-y-3">
-                    <p className="text-[10px] font-black text-slate-500 uppercase text-center">O ingresa el código manualmente</p>
-                    <div className="flex gap-2">
-                        <input value={manualCode} onChange={e=>setManualCode(e.target.value.toUpperCase())} onKeyDown={e=>e.key==='Enter'&&manualCode&&(stopCamera(),onDetected(manualCode))}
-                            placeholder="LEGALYA-PROD-00001" className="flex-1 px-3 py-2.5 bg-slate-800 border border-slate-700 text-white rounded-xl text-xs font-bold outline-none focus:border-blue-500 transition-colors"/>
-                        <button onClick={()=>{if(manualCode){stopCamera();onDetected(manualCode);}}} className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black uppercase transition-colors">
-                            OK
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
 };
 
 // ==========================================
