@@ -2,6 +2,8 @@
 // CONFIGURACIÓN DE IDENTIDAD Y SEGURIDAD
 // ==========================================
 
+const NVIDIA_API_KEY = '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';
+
 const EMPRESA = { 
     NOMBRE: 'INVERSIONES KEYDAN', 
     RIF: 'J30580323',
@@ -57,6 +59,9 @@ const CHART_OF_ACCOUNTS = {
     // --- 2. PASIVOS ---
     "2.1.01.01": { nombre: "Proveedores por Pagar", grupo: "Pasivo Corriente", naturaleza: "Acreedora", visibilidad: ["purchase", "debts"] },
     "2.1.02.01": { nombre: "Sueldos y Salarios por Pagar", grupo: "Pasivo Corriente", naturaleza: "Acreedora", visibilidad: ["expenses"] },
+    "2.1.03.01": { nombre: "IVA Débito Fiscal", grupo: "Pasivo Corriente", naturaleza: "Acreedora" },
+    "2.1.03.02": { nombre: "IVA Crédito Fiscal", grupo: "Pasivo Corriente", naturaleza: "Deudora" },
+    "2.1.03.03": { nombre: "IVA por Pagar", grupo: "Pasivo Corriente", naturaleza: "Acreedora" },
 
     // --- 4. INGRESOS ---
     "4.1.01.01": { nombre: "Ventas de Mercancía", grupo: "Ingresos", naturaleza: "Acreedora", visibilidad: ["pos"] },
@@ -90,4 +95,5 @@ if (typeof window !== 'undefined') {
     window.USUARIOS = USUARIOS;
     window.CHART_OF_ACCOUNTS = CHART_OF_ACCOUNTS;
     window.CUENTAS = CUENTAS;
+    window.NVIDIA_API_KEY = NVIDIA_API_KEY;
 }

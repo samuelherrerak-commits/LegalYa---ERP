@@ -1,0 +1,1 @@
+ALTER TABLE journal ADD COLUMN IF NOT EXISTS codigo_barra TEXT DEFAULT '';

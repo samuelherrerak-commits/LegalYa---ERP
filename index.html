@@ -4,19 +4,56 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LegalYa</title>
+    
+    <!-- Logo de la pestaña (Favicon) -->
+    <link rel="icon" type="image/png" href="./assets/Ya.png">
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.tailwindcss.com/3.4.1"></script>
-    <!-- Antes de tu bundle de React -->
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/react@18.2.0/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone@7.23.2/babel.min.js"></script>
     <script src="https://unpkg.com/lucide@0.263.1/dist/umd/lucide.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    
-    <link rel="stylesheet" href="estilos.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
-        tailwind.config = { theme: { extend: { borderRadius: { 'glass': '2rem' } } } }
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+
+    <link rel="stylesheet" href="estilos.css">
+    <script src="config.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    borderRadius: { 'glass': '2rem' },
+                    colors: {
+                        lab: {
+                            bg: '#141417',
+                            surface: '#1C1C21',
+                            'surface-hover': '#24242A',
+                            border: '#2C2C33',
+                            primary: '#E4E4E7',
+                            secondary: '#8A8A94',
+                            muted: '#5A5A64',
+                            accent: '#2B8252',
+                            'accent-hover': '#327D55',
+                            alert: '#D1453B',
+                            info: '#3B7DBF',
+                            warning: '#C8A424',
+                        }
+                    },
+                    fontFamily: {
+                        display: ['"Space Grotesk"', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'monospace'],
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
     </script>
     <style>
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -27,7 +64,41 @@
 </head>
 <body class="bg-slate-50 text-slate-900">
     <div id="root"></div>
-    <script src="config.js"></script>
+
+    <!-- 1. Núcleo -->
     <script type="text/babel" data-presets="react" src="app.js"></script>
+
+    <!-- 2. Módulos operativos -->
+    <script type="text/babel" data-presets="react" src="DashboardModule.js"></script>
+    <script type="text/babel" data-presets="react" src="SalesModule.js"></script>
+
+    <script type="text/babel" data-presets="react" src="DebtModule.js"></script>
+    <script type="text/babel" data-presets="react" src="ExpensesModule.js"></script>
+    <script type="text/babel" data-presets="react" src="ContactModule.js"></script>
+    <script type="text/babel" data-presets="react" src="InventoryModule.js"></script>
+    <script type="text/babel" data-presets="react" src="CashCloseModule.js"></script>
+
+    <!-- 3. Módulos nuevos -->
+    <script type="text/babel" data-presets="react" src="AccountingModule.js"></script>
+    <script type="text/babel" data-presets="react" src="HRModule.js"></script>
+
+    <!-- 4. LegalYa Auditor Suite -->
+    <script type="text/babel" data-presets="react" src="AuditorProvider.js"></script>
+    <script type="text/babel" data-presets="react" src="EmpresasList.js"></script>
+    <script type="text/babel" data-presets="react" src="AuditorAgentsModule.js"></script>
+    <script type="text/babel" data-presets="react" src="AuditorPDFModule.js"></script>
+    <script type="text/babel" data-presets="react" src="AuditorConciliacionesView.js"></script>
+    <script type="text/babel" data-presets="react" src="AuditorDeclaracionesView.js"></script>
+    <script type="text/babel" data-presets="react" src="AuditorDiarioView.js"></script>
+    <script type="text/babel" data-presets="react" src="AuditorAuditoriasView.js"></script>
+    <script type="text/babel" data-presets="react" src="AuditorLayout.js"></script>
+    <script type="text/babel" data-presets="react" src="AuditorModule.js"></script>
+    <script type="text/babel" data-presets="react" src="DeviceManagerModule.js"></script>
+
+    <!-- 5. Render final -->
+    <script type="text/babel" data-presets="react">
+        ReactDOM.createRoot(document.getElementById('root')).render(<RootApp/>);
+    </script>
+
 </body>
 </html>

@@ -1,65 +1,93 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+/* LegalYa — Design System */
 
-/* Reset y Base */
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
-body { 
-    font-family: 'Inter', sans-serif; 
-    overflow-x: hidden; 
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: 'Inter', sans-serif;
+    overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
-/* Clases de Utilidad Personalizadas */
-.glass-panel {
-    background: rgba(255, 255, 255, 0.75);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.3);
+/* ─── Scrollbar "The Lab" ─── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2C2C33; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #3C3C44; }
+
+/* ─── Font utilities ─── */
+.font-display { font-family: 'Space Grotesk', sans-serif; }
+.font-mono { font-family: 'JetBrains Mono', monospace; }
+
+/* ─── Animations ─── */
+
+/* Stagger entrance */
+@keyframes stagger-in {
+    from { opacity: 0; transform: translateY(6px); clip-path: inset(0 100% 0 0); }
+    to { opacity: 1; transform: translateY(0); clip-path: inset(0 0 0 0); }
+}
+.stagger-in {
+    animation: stagger-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-.glass-dark {
-    background: rgba(15, 23, 42, 0.9);
-    backdrop-filter: blur(10px);
+/* Morph transition between views */
+@keyframes morph-in {
+    from { clip-path: inset(0 0 0 100%); opacity: 0; }
+    to { clip-path: inset(0 0 0 0); opacity: 1; }
+}
+.morph-in {
+    animation: morph-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Animaciones */
-.animate-in { 
-    animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; 
+/* Alert pulse border */
+@keyframes alert-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(209, 69, 59, 0.4); }
+    50% { box-shadow: 0 0 0 3px rgba(209, 69, 59, 0.1); }
+    100% { box-shadow: 0 0 0 0 rgba(209, 69, 59, 0); }
+}
+.alert-pulse {
+    animation: alert-pulse 0.6s ease-out 2;
 }
 
-@keyframes fadeIn { 
-    from { 
-        opacity: 0; 
-        transform: translateY(20px); 
-    } 
-    to { 
-        opacity: 1; 
-        transform: translateY(0); 
-    } 
+/* Skeleton shimmer */
+@keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+.skeleton {
+    background: linear-gradient(90deg, #1C1C21 25%, #24242A 50%, #1C1C21 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+    border-radius: 4px;
 }
 
-/* Scrollbar Estilizado */
-::-webkit-scrollbar {
-    width: 6px;
+/* Slide up for content panels */
+@keyframes slide-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.slide-up {
+    animation: slide-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-::-webkit-scrollbar-track {
-    background: transparent;
+/* Press effect for buttons */
+.btn-press:active {
+    transform: scale(0.97);
+    transition: transform 0.08s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 10px;
+/* Sidebar item active indicator */
+@keyframes sidebar-indicator {
+    from { width: 0; }
+    to { width: 100%; }
+}
+.sidebar-indicator {
+    animation: sidebar-indicator 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-}
-
-/* Inputs y Selects */
+/* ─── Misc ─── */
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {
     -webkit-appearance: none;
