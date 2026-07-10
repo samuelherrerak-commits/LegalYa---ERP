@@ -233,7 +233,7 @@ const InventoryModule = ({ onBack, initialTab = 'stock' }) => {
                     instance = new Html5Qrcode('barcode-reader-reception');
                     await instance.start(
                         { facingMode: 'environment' },
-                        { fps: 10, qrbox: { width: 260, height: 260 }, aspectRatio: 1.0 },
+                        { fps: 10, qrbox: { width: 300, height: 100 } },
                         (code) => {
                             setItem(prev => ({ ...prev, barcode: code }));
                             const found = inventory.find(p =>
