@@ -221,67 +221,7 @@ const InventoryModule = ({ onBack, initialTab = 'stock' }) => {
         (payMethod !== 'bs' || (payForm.tasa && parseFloat(payForm.tasa) > 0)) &&
         (payMethod !== 'transfer' || payForm.banco);
 
-    // ── Barcode scanner modal (reception) ──
-    const BarcodeScanner = () => {
-        const qrRef2 = React.useRef(null);
-        const [camError, setCamError] = useState('');
 
-        React.useEffect(() => {
-            let instance = null;
-            (async () => {
-                try {
-                    instance = new Html5Qrcode('barcode-reader-reception');
-                    await instance.start(
-                        { facingMode: 'environment' },
-                        { fps: 10, qrbox: { width: 400, height: 150 } },
-                        (code) => {
-                            setItem(prev => ({ ...prev, barcode: code }));
-                            const found = inventory.find(p =>
-                                p.codigo_barra === code || p.name === code.toUpperCase()
-                            );
-                            if (found) setItem(prev => ({
-                                ...prev,
-                                name: found.name,
-                                sellPrice: found.sellPrice.toString(),
-                                barcode: code,
-                            }));
-                            if (instance) { instance.stop().catch(() => {}); }
-                            setScannerBarcode(false);
-                        },
-                        () => {}
-                    );
-                } catch (err) {
-                    setCamError('No se pudo acceder a la cámara. Verifica permisos HTTPS/localhost.');
-                }
-            })();
-            return () => {
-                if (instance) { instance.stop().then(() => instance.clear()).catch(() => {}); }
-            };
-        }, []);
-
-        return (
-            <div className="fixed inset-0 bg-black z-50 flex flex-col">
-                <div className="flex items-center justify-between px-4 py-3 bg-black/80">
-                    <p className="text-white font-black uppercase text-sm">Escanear código</p>
-                    <button onClick={() => setScannerBarcode(false)} className="px-4 py-2 bg-white/10 text-white rounded-xl text-xs font-black uppercase">Cerrar</button>
-                </div>
-                <div className="flex-1 relative">
-                    <div id="barcode-reader-reception" className="w-full h-full" />
-                    {camError && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/80 p-6">
-                            <p className="text-rose-300 text-xs font-bold text-center whitespace-pre-line">{camError}</p>
-                        </div>
-                    )}
-                    <style>{`
-                        #barcode-reader-reception video { width:100% !important; height:100% !important; object-fit:cover !important; }
-                        #barcode-reader-reception > img, #barcode-reader-reception__header_message,
-                        #barcode-reader-reception__status_span, #barcode-reader-reception__camera_selection,
-                        #barcode-reader-reception__dashboard { display:none !important; }
-                    `}</style>
-                </div>
-            </div>
-        );
-    };
 
     // ── RENDER ──
     return (
@@ -613,7 +553,88 @@ const InventoryModule = ({ onBack, initialTab = 'stock' }) => {
             )}
 
             {/* Barcode scanner overlay */}
-            {scannerBarcode && <BarcodeScanner />}
+            {scannerBarcode && (
+                <BarcodeScanner
+                    onScan={(code) => {
+                        setItem(prev => ({ ...prev, barcode: code }));
+                        const found = inventory.find(p =>
+                            p.codigo_barra === code || p.name === code.toUpperCase()
+                        );
+                        if (found) setItem(prev => ({
+                            ...prev,
+                            name: found.name,
+                            sellPrice: found.sellPrice.toString(),
+                            barcode: code,
+                        }));
+                        setScannerBarcode(false);
+                    }}
+                    onClose={() => setScannerBarcode(false)}
+                />
+            )}
+        </div>
+    );
+};
+
+// ── Standalone Barcode Scanner component ──
+const BarcodeScanner = ({ onScan, onClose }) => {
+    const instanceRef = React.useRef(null);
+    const [camError, setCamError] = useState('');
+
+    React.useEffect(() => {
+        (async () => {
+            try {
+                instanceRef.current = new Html5Qrcode('barcode-reader-reception');
+                await instanceRef.current.start(
+                    { facingMode: 'environment' },
+                    { fps: 10, qrbox: { width: 250, height: 100 }, aspectRatio: 1.0 },
+                    (code) => { onScan(code); },
+                    () => {}
+                );
+            } catch (err) {
+                setCamError('No se pudo acceder a la cámara. Verifica permisos HTTPS/localhost.');
+            }
+        })();
+        return () => {
+            if (instanceRef.current) {
+                instanceRef.current.stop().then(() => instanceRef.current.clear()).catch(() => {});
+            }
+        };
+    }, []);
+
+    return (
+        <div className="fixed inset-0 bg-black z-50 flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 bg-black/80 backdrop-blur-sm flex-shrink-0">
+                <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+                    <p className="text-white font-black uppercase text-sm">Escanear código de barra</p>
+                </div>
+                <button onClick={onClose}
+                    className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-black uppercase transition-all">
+                    Cerrar
+                </button>
+            </div>
+            <div className="relative flex-1 bg-black overflow-hidden">
+                <div id="barcode-reader-reception" style={{ width: '100%', height: '100%' }} />
+                {camError && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/80 p-6">
+                        <p className="text-rose-300 text-xs font-bold text-center whitespace-pre-line">{camError}</p>
+                    </div>
+                )}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="relative w-72 h-28">
+                        <div className="absolute top-0 left-0 w-7 h-7 border-t-4 border-l-4 border-blue-400 rounded-tl-lg"></div>
+                        <div className="absolute top-0 right-0 w-7 h-7 border-t-4 border-r-4 border-blue-400 rounded-tr-lg"></div>
+                        <div className="absolute bottom-0 left-0 w-7 h-7 border-b-4 border-l-4 border-blue-400 rounded-bl-lg"></div>
+                        <div className="absolute bottom-0 right-0 w-7 h-7 border-b-4 border-r-4 border-blue-400 rounded-br-lg"></div>
+                    </div>
+                </div>
+                <style>{`
+                    #barcode-reader-reception video { width:100% !important; height:100% !important; object-fit:cover !important; }
+                    #barcode-reader-reception > img, #barcode-reader-reception__header_message,
+                    #barcode-reader-reception__status_span, #barcode-reader-reception__camera_selection,
+                    #barcode-reader-reception__dashboard { display:none !important; }
+                `}</style>
+            </div>
         </div>
     );
 };
