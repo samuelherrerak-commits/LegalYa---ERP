@@ -575,65 +575,94 @@ const InventoryModule = ({ onBack, initialTab = 'stock' }) => {
     );
 };
 
-// ── Standalone Barcode Scanner component ──
+// ── Barcode Scanner: cámara nativa + BarcodeDetector (Chrome) ──
 const BarcodeScanner = ({ onScan, onClose }) => {
-    const instanceRef = React.useRef(null);
-    const [camError, setCamError] = useState('');
+    const fileRef = React.useRef(null);
+    const [status, setStatus] = useState('ready');
 
     React.useEffect(() => {
-        (async () => {
-            try {
-                instanceRef.current = new Html5Qrcode('barcode-reader-reception');
-                await instanceRef.current.start(
-                    { facingMode: 'environment' },
-                    { fps: 10 },
-                    (code) => { onScan(code); },
-                    () => {}
-                );
-            } catch (err) {
-                setCamError('No se pudo acceder a la cámara. Verifica permisos HTTPS/localhost.');
-            }
-        })();
-        return () => {
-            if (instanceRef.current) {
-                instanceRef.current.stop().then(() => instanceRef.current.clear()).catch(() => {});
-            }
-        };
+        const t = setTimeout(() => fileRef.current?.click(), 300);
+        return () => clearTimeout(t);
     }, []);
+
+    const detect = async (file) => {
+        if (!file) return;
+        setStatus('scanning');
+        try {
+            if (!window.BarcodeDetector) {
+                setStatus('unsupported');
+                return;
+            }
+            const bitmap = await createImageBitmap(file);
+            const detector = new BarcodeDetector({
+                formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'itf', 'codabar']
+            });
+            const codes = await detector.detect(bitmap);
+            if (codes.length > 0) {
+                onScan(codes[0].rawValue);
+            } else {
+                setStatus('notfound');
+            }
+        } catch (e) {
+            setStatus('notfound');
+        }
+    };
+
+    const retry = () => {
+        setStatus('ready');
+        setTimeout(() => fileRef.current?.click(), 200);
+    };
 
     return (
         <div className="fixed inset-0 bg-black z-50 flex flex-col">
+            <input ref={fileRef} type="file" accept="image/*" capture="environment"
+                className="hidden" onChange={e => detect(e.target.files?.[0])} />
             <div className="flex items-center justify-between px-4 py-3 bg-black/80 backdrop-blur-sm flex-shrink-0">
-                <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
-                    <p className="text-white font-black uppercase text-sm">Escanear código de barra</p>
-                </div>
+                <p className="text-white font-black uppercase text-sm">Escanear código de barra</p>
                 <button onClick={onClose}
                     className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-black uppercase transition-all">
                     Cerrar
                 </button>
             </div>
-            <div className="relative flex-1 bg-black overflow-hidden">
-                <div id="barcode-reader-reception" style={{ width: '100%', height: '100%' }} />
-                {camError && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/80 p-6">
-                        <p className="text-rose-300 text-xs font-bold text-center whitespace-pre-line">{camError}</p>
+            <div className="flex-1 flex items-center justify-center p-6">
+                {status === 'ready' && (
+                    <div className="flex flex-col items-center gap-4">
+                        <div className="w-20 h-20 rounded-full border-4 border-white/30 flex items-center justify-center animate-pulse">
+                            <Icon name="Camera" size={32} className="text-white" />
+                        </div>
+                        <p className="text-white/40 text-sm font-bold">Abriendo cámara...</p>
                     </div>
                 )}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="relative w-72 h-28">
-                        <div className="absolute top-0 left-0 w-7 h-7 border-t-4 border-l-4 border-blue-400 rounded-tl-lg"></div>
-                        <div className="absolute top-0 right-0 w-7 h-7 border-t-4 border-r-4 border-blue-400 rounded-tr-lg"></div>
-                        <div className="absolute bottom-0 left-0 w-7 h-7 border-b-4 border-l-4 border-blue-400 rounded-bl-lg"></div>
-                        <div className="absolute bottom-0 right-0 w-7 h-7 border-b-4 border-r-4 border-blue-400 rounded-br-lg"></div>
+                {status === 'scanning' && (
+                    <p className="text-white/40 text-sm font-bold animate-pulse">Procesando imagen...</p>
+                )}
+                {status === 'notfound' && (
+                    <div className="text-center">
+                        <p className="text-amber-300 text-sm font-bold mb-4">No se detectó código de barra en la foto.</p>
+                        <div className="flex gap-3 justify-center">
+                            <button onClick={retry}
+                                className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-2xl font-black uppercase text-xs transition-all">
+                                Intentar de nuevo
+                            </button>
+                            <button onClick={onClose}
+                                className="px-6 py-3 bg-white/5 hover:bg-white/10 text-white/60 rounded-2xl font-black uppercase text-xs transition-all">
+                                Ingresar manual
+                            </button>
+                        </div>
                     </div>
-                </div>
-                <style>{`
-                    #barcode-reader-reception video { width:100% !important; height:100% !important; object-fit:cover !important; }
-                    #barcode-reader-reception > img, #barcode-reader-reception__header_message,
-                    #barcode-reader-reception__status_span, #barcode-reader-reception__camera_selection,
-                    #barcode-reader-reception__dashboard { display:none !important; }
-                `}</style>
+                )}
+                {status === 'unsupported' && (
+                    <div className="text-center max-w-xs">
+                        <p className="text-rose-300 text-sm font-bold mb-4">
+                            Tu navegador no soporta escáner de código de barra.
+                            Ingresa el código manualmente en el campo de texto.
+                        </p>
+                        <button onClick={onClose}
+                            className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-2xl font-black uppercase text-xs transition-all">
+                            Ingresar manual
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );
