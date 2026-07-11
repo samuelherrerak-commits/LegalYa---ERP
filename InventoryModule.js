@@ -586,7 +586,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
                 instanceRef.current = new Html5Qrcode('barcode-reader-reception');
                 await instanceRef.current.start(
                     { facingMode: 'environment' },
-                    { fps: 10, qrbox: { width: 250, height: 100 }, aspectRatio: 1.0 },
+                    { fps: 10 },
                     (code) => { onScan(code); },
                     () => {}
                 );
